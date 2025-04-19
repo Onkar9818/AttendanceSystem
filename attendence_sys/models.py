@@ -51,7 +51,7 @@ class Student(models.Model):
     )
 
     firstname = models.CharField(max_length=200, null=True, blank=True)
-    lastname = models.CharField(max_length=200, null=True, blank=True)
+    lastname = models.CharField(max_length=200, null=True, blank=True)  
     registration_id = models.CharField(max_length=200, null=True)
     branch = models.CharField(max_length=100, null=True, choices=BRANCH)
     year = models.CharField(max_length=100, null=True, choices=YEAR)

@@ -94,46 +94,83 @@ def updateStudent(request):
     return render(request, 'attendence_sys/student_update.html', context)
 
 
-@login_required(login_url = 'login')
+@login_required(login_url='login')
 def takeAttendence(request):
     if request.method == 'POST':
         details = {
-            'branch':request.POST['branch'],
+            'branch': request.POST['branch'],
             'year': request.POST['year'],
-            'section':request.POST['section'],
-            'period':request.POST['period'],
-            'faculty':request.user.faculty
-            }
-        if Attendence.objects.filter(date = str(date.today()),branch = details['branch'], year = details['year'], section = details['section'],period = details['period']).count() != 0 :
-            messages.error(request, "Attendence already recorded.")
+            'section': request.POST['section'],
+            'period': request.POST['period'],
+            'faculty': request.user.faculty
+        }
+        
+        # Check if attendance already exists
+        today = date.today()
+        existing = Attendence.objects.filter(
+            date=today,
+            branch=details['branch'],
+            year=details['year'],
+            section=details['section'],
+            period=details['period']
+        ).exists()
+        
+        if existing:
+            messages.error(request, "Attendance already recorded for this class/period.")
             return redirect('home')
-        else:
-            students = Student.objects.filter(branch = details['branch'], year = details['year'], section = details['section'])
-            names = Recognizer(details)
+        
+        try:
+            # Get recognized student IDs
+            recognized_ids = Recognizer(details)
+            
+            # Get all students for this class
+            students = Student.objects.filter(
+                branch=details['branch'],
+                year=details['year'],
+                section=details['section']
+            )
+            
+            # Create attendance records
+            attendance_records = []
             for student in students:
-                if str(student.registration_id) in names:
-                    attendence = Attendence(Faculty_Name = request.user.faculty, 
-                    Student_ID = str(student.registration_id), 
-                    period = details['period'], 
-                    branch = details['branch'], 
-                    year = details['year'], 
-                    section = details['section'],
-                    status = 'Present')
-                    attendence.save()
-                else:
-                    attendence = Attendence(Faculty_Name = request.user.faculty, 
-                    Student_ID = str(student.registration_id), 
-                    period = details['period'],
-                    branch = details['branch'], 
-                    year = details['year'], 
-                    section = details['section'])
-                    attendence.save()
-            attendences = Attendence.objects.filter(date = str(date.today()),branch = details['branch'], year = details['year'], section = details['section'],period = details['period'])
-            context = {"attendences":attendences, "ta":True}
-            messages.success(request, "Attendence taking Success")
-            return render(request, 'attendence_sys/attendence.html', context)        
-    context = {}
-    return render(request, 'attendence_sys/home.html', context)
+                status = 'Present' if str(student.registration_id) in recognized_ids else 'Absent'
+                attendance_records.append(
+                    Attendence(
+                        Faculty_Name=str(request.user.faculty),
+                        Student_ID=str(student.registration_id),
+                        period=details['period'],
+                        branch=details['branch'],
+                        year=details['year'],
+                        section=details['section'],
+                        status=status
+                    )
+                )
+            
+            # Bulk create for efficiency
+            Attendence.objects.bulk_create(attendance_records)
+            
+            # Get the newly created records for display
+            attendances = Attendence.objects.filter(
+                date=today,
+                branch=details['branch'],
+                year=details['year'],
+                section=details['section'],
+                period=details['period']
+            )
+            
+            messages.success(request, f"Attendance recorded successfully! Present: {len(recognized_ids)}/{students.count()}")
+            context = {
+                "attendences": attendances,
+                "ta": True,
+                "class_info": f"{details['branch']} {details['year']}-{details['section']} Period {details['period']}"
+            }
+            return render(request, 'attendence_sys/attendence.html', context)
+            
+        except Exception as e:
+            messages.error(request, f"Error taking attendance: {str(e)}")
+            return redirect('home')
+    
+    return render(request, 'attendence_sys/home.html')
 
 def searchAttendence(request):
     attendences = Attendence.objects.all()
